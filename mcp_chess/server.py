@@ -1,10 +1,14 @@
 import chess
+import chess.svg
+import cairosvg
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 import logging
 import click
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP, Image
 import mcp.types as types
+from PIL import Image as PILImage
+import io
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -23,17 +27,49 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[dict]:
         board = None
         logger.info("Server lifespan ended.")
 
-mcp = FastMCP("ChessServer", lifespan=server_lifespan, dependencies=["chess"])
+mcp = FastMCP("ChessServer", lifespan=server_lifespan, dependencies=["chess", "cairosvg", "Pillow"])
 
+def svg_board_to_png(svg_board: str) -> dict:
+    png_data = cairosvg.svg2png(bytestring=svg_board.encode("utf-8"))
+    
+    original_image = PILImage.open(io.BytesIO(png_data))
+    width, height = original_image.size
+
+    target_aspect = 2
+    current_aspect = width / height
+
+    if current_aspect > target_aspect:
+        # Image is wider than 2:1
+        target_width = width
+        target_height = int(width / target_aspect)
+    else:
+        # Image is narrower than or equal to 2:1
+        target_height = height
+        target_width = int(height * target_aspect)
+
+    background = PILImage.new('RGB', (target_width, target_height), (0, 0, 0))
+
+    paste_x = (target_width - width) // 2
+    paste_y = (target_height - height) // 2
+
+    background.paste(original_image, (paste_x, paste_y))
+
+    output_buffer = io.BytesIO()
+    background.save(output_buffer, format='PNG')
+    padded_png_data = output_buffer.getvalue()
+
+    return Image(data=padded_png_data, format="png")
 
 @mcp.tool()
-async def get_board_fen() -> str:
-    """Provides the current state of the chessboard in FEN notation."""
+async def get_board_visualization() -> dict:
+    """Provides the current state of the chessboard as an image."""
     global board
     if board:
-        return board.fen()
+        return svg_board_to_png(chess.svg.board(board))
+        
     logger.warning("Board not available in get_board_fen")
-    return chess.Board().fen() # Return starting FEN if not initialized
+    return svg_board_to_png(chess.svg.board(chess.Board()))
+    
 
 @mcp.tool()
 async def get_turn() -> str:
@@ -59,7 +95,7 @@ async def get_valid_moves() -> list[str]:
 @mcp.tool()
 async def make_move(move_uci: str) -> dict:
     """
-    Makes a move on the board for the user.
+    Makes a move on the board for the user and returns the new board state in SVG for visualization.
     Args:
         move_uci: The player's move in UCI format (e.g., 'e2e4').
     Returns:
@@ -83,12 +119,11 @@ async def make_move(move_uci: str) -> dict:
         logger.warning(f"Illegal move received: {move_uci}")
         return {"error": f"Illegal move: {move_uci}"}
 
-    # Apply user move
     move_san = board.san(move)
     board.push(move)
+    svg = chess.svg.board(board)
     logger.info(f"Applied move: {move_san} ({move_uci}). New FEN: {board.fen()}")
 
-    # Check if the move ended the game
     game_over = board.is_game_over()
     result = board.result() if game_over else None
     if game_over:
@@ -96,22 +131,30 @@ async def make_move(move_uci: str) -> dict:
 
     return {
         "move_san": move_san,
-        "new_fen": board.fen(),
         "game_over": game_over,
-        "result": result,
+        "fen": board.fen()
     }
 
 
 @mcp.tool()
-async def new_game() -> str:
-    """Starts a new game, resetting the board to the initial position."""
+async def new_game(user_plays_white: bool = True) -> str:
+    """
+    Starts a new game, resetting the board to the initial position.
+
+    Args:
+        user_plays_white: Whether the user will play as white. Defaults to True.
+    
+    Returns:
+        A confirmation message indicating the game has started and the user's color.
+    """
     global board
     
     if board:
         board.reset()
-        logger.info("Board reset for a new game.")
+        logger.info(f"Board reset for a new game. User plays {'white' if user_plays_white else 'black'}.")
         fen = board.fen()
-        return f"New game started. Board reset. Current FEN: {fen}"
+        user_color = "white" if user_plays_white else "black"
+        return f"New game started. Board reset. You are playing as {user_color}. Current FEN: {fen}"
     else:
         logger.error("Board not available in new_game prompt.")
         return "Error: Could not reset the board. Server might not be initialized."
@@ -120,25 +163,14 @@ async def new_game() -> str:
 async def new_game(arguments: dict[str, str] | None = None) -> types.GetPromptResult:
     """
     Handles the 'new_game' prompt, creating messages for starting a new chess game.
-    
-    Args:
-        arguments: Optional dictionary containing prompt arguments, including 'opening'.
-                  If 'opening' is specified, it will be mentioned in the prompt.
-    
+
     Returns:
         A GetPromptResult containing the messages to initiate a new game conversation.
     """
-    if arguments is None:
-        arguments = {}
-    
-    opening = arguments.get("opening")
     
     messages = []
     
-    # Create the main prompt message
-    prompt_text = "I'd like to start a new chess game."
-    if opening:
-        prompt_text += f" Let's play the {opening} opening."
+    prompt_text = "I'd like to start a new chess game. Visualize the board after your move"
     
     messages.append(
         types.PromptMessage(
@@ -149,7 +181,7 @@ async def new_game(arguments: dict[str, str] | None = None) -> types.GetPromptRe
     
     return types.GetPromptResult(
         messages=messages,
-        description="Starting a new chess game" + (f" with {opening} opening" if opening else "")
+        description="Starting a new chess game"
     )
 
 

@@ -1,13 +1,15 @@
 [project]
 name = "mcp-chess"
-version = "0.1.4"
+version = "0.1.6"
 description = "MCP server for playing chess against AI"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "mcp[cli]>=1.7.1",
     "chess==1.9.4",
-    "uvicorn>=0.29.0"
+    "uvicorn>=0.29.0",
+    "cairosvg>=2.5.1",
+    "Pillow>=10.0.0"
 ]
 
 [project.scripts]
