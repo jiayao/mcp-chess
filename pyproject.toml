@@ -1,10 +1,18 @@
 [project]
 name = "mcp-chess"
-version = "0.1.0"
+version = "0.1.4"
 description = "MCP server for playing chess against AI"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "mcp[cli]>=1.7.1",
-    "chess==1.9.4"
+    "chess==1.9.4",
+    "uvicorn>=0.29.0"
 ]
+
+[project.scripts]
+mcp-chess = "mcp_chess.server:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

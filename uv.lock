@@ -159,17 +159,19 @@ cli = [
 
 [[package]]
 name = "mcp-chess"
-version = "0.1.0"
-source = { virtual = "." }
+version = "0.1.4"
+source = { editable = "." }
 dependencies = [
     { name = "chess" },
     { name = "mcp", extra = ["cli"] },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "chess", specifier = "==1.9.4" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.7.1" },
+    { name = "uvicorn", specifier = ">=0.29.0" },
 ]
 
 [[package]]

@@ -1,11 +1,8 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 import chess
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 import logging
-
+import click
 from mcp.server.fastmcp import FastMCP
 import mcp.types as types
 
@@ -26,7 +23,7 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[dict]:
         board = None
         logger.info("Server lifespan ended.")
 
-mcp = FastMCP("ChessServer", lifespan=server_lifespan)
+mcp = FastMCP("ChessServer", lifespan=server_lifespan, dependencies=["chess"])
 
 
 @mcp.tool()
@@ -154,3 +151,13 @@ async def new_game(arguments: dict[str, str] | None = None) -> types.GetPromptRe
         messages=messages,
         description="Starting a new chess game" + (f" with {opening} opening" if opening else "")
     )
+
+
+@click.command()
+def main() -> int:
+    logger.info(f"Starting Chess Server.")
+    mcp.run()
+
+
+if __name__ == "__main__":
+    main()
