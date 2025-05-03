@@ -1,0 +1,10 @@
+[project]
+name = "mcp-chess"
+version = "0.1.0"
+description = "MCP server for playing chess against AI"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp[cli]>=1.7.1",
+    "chess==1.9.4"
+]
