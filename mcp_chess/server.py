@@ -13,6 +13,7 @@ import io
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 board: chess.Board | None = None
+user_color: chess.Color = chess.WHITE # Added: Keep track of user's color
 
 @asynccontextmanager
 async def server_lifespan(server: FastMCP) -> AsyncIterator[dict]:
@@ -63,12 +64,14 @@ def svg_board_to_png(svg_board: str) -> dict:
 @mcp.tool()
 async def get_board_visualization() -> dict:
     """Provides the current state of the chessboard as an image."""
-    global board
+    global board, user_color # Added user_color
     if board:
-        return svg_board_to_png(chess.svg.board(board))
+        # Added orientation based on user_color
+        return svg_board_to_png(chess.svg.board(board, orientation=user_color))
         
     logger.warning("Board not available in get_board_fen")
-    return svg_board_to_png(chess.svg.board(chess.Board()))
+    # Default orientation is WHITE if board isn't initialized
+    return svg_board_to_png(chess.svg.board(chess.Board(), orientation=chess.WHITE))
     
 
 @mcp.tool()
@@ -147,14 +150,15 @@ async def new_game(user_plays_white: bool = True) -> str:
     Returns:
         A confirmation message indicating the game has started and the user's color.
     """
-    global board
+    global board, user_color # Added user_color here
     
     if board:
         board.reset()
+        user_color = chess.WHITE if user_plays_white else chess.BLACK # Added: Set user_color
         logger.info(f"Board reset for a new game. User plays {'white' if user_plays_white else 'black'}.")
         fen = board.fen()
-        user_color = "white" if user_plays_white else "black"
-        return f"New game started. Board reset. You are playing as {user_color}. Current FEN: {fen}"
+        color_name = "white" if user_plays_white else "black" # Changed variable name for clarity
+        return f"New game started. Board reset. You are playing as {color_name}. Current FEN: {fen}"
     else:
         logger.error("Board not available in new_game prompt.")
         return "Error: Could not reset the board. Server might not be initialized."
@@ -170,7 +174,7 @@ async def new_game(arguments: dict[str, str] | None = None) -> types.GetPromptRe
     
     messages = []
     
-    prompt_text = "I'd like to start a new chess game. Visualize the board after your move"
+    prompt_text = "I'd like to start a new chess game. Visualize the board after both players made a move"
     
     messages.append(
         types.PromptMessage(
