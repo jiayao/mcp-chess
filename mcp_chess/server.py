@@ -1,5 +1,6 @@
 import chess
 import chess.svg
+import chess.pgn
 import cairosvg
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
@@ -14,6 +15,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 board: chess.Board | None = None
 user_color: chess.Color = chess.WHITE # Added: Keep track of user's color
+
+PIECE_NAME_TO_TYPE = {
+    "pawn": chess.PAWN,
+    "knight": chess.KNIGHT,
+    "bishop": chess.BISHOP,
+    "rook": chess.ROOK,
+    "queen": chess.QUEEN,
+    "king": chess.KING,
+}
 
 @asynccontextmanager
 async def server_lifespan(server: FastMCP) -> AsyncIterator[dict]:
@@ -162,6 +172,77 @@ async def new_game(user_plays_white: bool = True) -> str:
     else:
         logger.error("Board not available in new_game prompt.")
         return "Error: Could not reset the board. Server might not be initialized."
+
+@mcp.tool()
+async def find_position_in_pgn(pgn_string: str, condition: str) -> dict | str:
+    """
+    Finds the first board position in a PGN string that matches a given condition
+    (e.g., 'bishop on a3') and returns an image of that board.
+
+    Args:
+        pgn_string: The PGN string of the game.
+        condition: A string describing the condition, format: "piece_type on square_name"
+                   (e.g., "bishop on a3", "knight on f6", "king on g1").
+
+    Returns:
+        An Image dictionary containing the PNG data of the board state if found,
+        or a string with an error message.
+    """
+    logger.info(f"Searching PGN for condition: '{condition}'")
+    try:
+        # Parse the condition
+        parts = condition.lower().split(" on ")
+        if len(parts) != 2:
+            raise ValueError("Condition format must be 'piece_type on square_name'")
+            
+        piece_name = parts[0].strip()
+        square_name = parts[1].strip()
+
+        if piece_name not in PIECE_NAME_TO_TYPE:
+            raise ValueError(f"Invalid piece type: {piece_name}. Must be one of {list(PIECE_NAME_TO_TYPE.keys())}")
+        target_piece_type = PIECE_NAME_TO_TYPE[piece_name]
+
+        try:
+            target_square = chess.parse_square(square_name)
+        except ValueError:
+             raise ValueError(f"Invalid square name: {square_name}")
+
+        # Parse the PGN
+        pgn_io = io.StringIO(pgn_string)
+        game = chess.pgn.read_game(pgn_io)
+
+        if game is None:
+            logger.warning("Could not parse PGN string.")
+            return "Error: Could not parse the provided PGN string."
+
+        board_state = game.board() # Initial position
+        # Check initial position first
+        piece_on_square = board_state.piece_at(target_square)
+        if piece_on_square and piece_on_square.piece_type == target_piece_type:
+             logger.info(f"Condition '{condition}' met at initial position.")
+             # Determine orientation based on whose turn it is (or default to white)
+             orientation = board_state.turn
+             return svg_board_to_png(chess.svg.board(board_state, orientation=orientation))
+
+        # Iterate through moves
+        for move in game.mainline_moves():
+            board_state.push(move)
+            piece_on_square = board_state.piece_at(target_square)
+            if piece_on_square and piece_on_square.piece_type == target_piece_type:
+                logger.info(f"Condition '{condition}' met after move {board_state.fullmove_number}{'.' if board_state.turn == chess.BLACK else '...'}{move.uci()}.")
+                 # Determine orientation based on whose turn it is
+                orientation = board_state.turn 
+                return svg_board_to_png(chess.svg.board(board_state, orientation=orientation))
+
+        logger.info(f"Condition '{condition}' not found in the PGN.")
+        return f"Condition '{condition}' not found in the provided PGN."
+
+    except ValueError as e:
+        logger.error(f"Error processing find_position_in_pgn: {e}")
+        return f"Error: {e}"
+    except Exception as e:
+        logger.error(f"Unexpected error in find_position_in_pgn: {e}", exc_info=True)
+        return "An unexpected server error occurred."
 
 @mcp.prompt()
 async def new_game(arguments: dict[str, str] | None = None) -> types.GetPromptResult:
