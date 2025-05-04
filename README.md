@@ -21,9 +21,12 @@ To use this chess server, add the following configuration to your MCP config:
 
 ## Usage
 
+Play a game:
 ![Chess starting position with black pieces](screenshots/start_black.png)
 
 ![A few moves later](screenshots/acc_dragon.png)
 
+Find a position in a PGN for game analysis:
 
+![Find a position in a PGN](screenshots/find_position.png)
 
