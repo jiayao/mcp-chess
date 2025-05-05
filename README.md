@@ -1,8 +1,20 @@
 # MCP Chess Server
 
+[![smithery badge](https://smithery.ai/badge/@jiayao/mcp-chess)](https://smithery.ai/server/@jiayao/mcp-chess)
+
 This MCP let's you play chess against any LLM.
 
 ## Installation
+
+### Installing via Smithery
+
+To install Chess Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@jiayao/mcp-chess):
+
+```bash
+npx -y @smithery/cli install @jiayao/mcp-chess --client claude
+```
+
+### Manual Installation
 
 To use this chess server, add the following configuration to your MCP config:
 
