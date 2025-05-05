@@ -104,15 +104,14 @@ async def get_valid_moves() -> list[str]:
     logger.warning("Board not available in get_valid_moves")
     return [] # Return empty list if not initialized
 
-
 @mcp.tool()
-async def make_move(move_uci: str) -> dict:
+async def make_move(move_san: str) -> dict:
     """
-    Makes a move on the board for the user and returns the new board state in SVG for visualization.
+    Makes a move on the board using standard algebraic notation (SAN).
     Args:
-        move_uci: The player's move in UCI format (e.g., 'e2e4').
+        move_san: The player's move in algebraic notation (e.g., 'e4', 'Nf3', 'Bxe5').
     Returns:
-        A dictionary containing the move in SAN format, the new board FEN,
+        A dictionary containing the move in SAN format, the move in UCI format, the new board FEN,
         whether the game is over, and the result if applicable.
     """
     global board
@@ -121,21 +120,18 @@ async def make_move(move_uci: str) -> dict:
         logger.error("Board not initialized in make_move.")
         return {"error": "Server not fully initialized."}
 
-    logger.info(f"Received move: {move_uci}")
+    logger.info(f"Received algebraic move: {move_san}")
     try:
-        move = board.parse_uci(move_uci)
+        move = board.parse_san(move_san)
     except ValueError:
-        logger.warning(f"Invalid UCI move received: {move_uci}")
-        return {"error": f"Invalid UCI move format: {move_uci}"}
+        logger.warning(f"Invalid algebraic move received: {move_san}")
+        return {"error": f"Invalid algebraic notation: {move_san}"}
 
-    if move not in board.legal_moves:
-        logger.warning(f"Illegal move received: {move_uci}")
-        return {"error": f"Illegal move: {move_uci}"}
-
-    move_san = board.san(move)
+    move_san_parsed = board.san(move) # Get the canonical SAN from the parsed move
+    move_uci = move.uci()
     board.push(move)
-    svg = chess.svg.board(board)
-    logger.info(f"Applied move: {move_san} ({move_uci}). New FEN: {board.fen()}")
+    svg = chess.svg.board(board) # svg variable is created but not used; consider removing if not needed later
+    logger.info(f"Applied move: {move_san_parsed} ({move_uci}). New FEN: {board.fen()}")
 
     game_over = board.is_game_over()
     result = board.result() if game_over else None
@@ -143,11 +139,11 @@ async def make_move(move_uci: str) -> dict:
         logger.info(f"Game over. Result: {result}")
 
     return {
-        "move_san": move_san,
+        "move_san": move_san_parsed,
+        "move_uci": move_uci,
         "game_over": game_over,
         "fen": board.fen()
     }
-
 
 @mcp.tool()
 async def new_game(user_plays_white: bool = True) -> str:
